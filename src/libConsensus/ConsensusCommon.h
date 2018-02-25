@@ -28,18 +28,12 @@
 #include "libNetwork/PeerStore.h"
 #include "libUtils/TimeLockedFunction.h"
 
-typedef std::function<bool(const std::vector<unsigned char> & input, 
-                           std::vector<unsigned char> & errorMsg)> MsgContentValidatorFunc;
+typedef std::function<bool(const std::vector<unsigned char> &)> MsgContentValidatorFunc;
 
 unsigned int GetBitVectorLengthInBytes(unsigned int length_in_bits);
-vector<bool> GetBitVector(const vector<unsigned char> & src, 
-                            unsigned int offset, 
-                            unsigned int expected_length);
-unsigned int SetBitVector(vector<unsigned char> & dst, 
-                            unsigned int offset, 
-                            const vector<bool> & value);
+vector<bool> GetBitVector(const vector<unsigned char> & src, unsigned int offset, unsigned int expected_length);
+unsigned int SetBitVector(vector<unsigned char> & dst, unsigned int offset, const vector<bool> & value);
 
-/// Implements base functionality shared between all consensus committee members
 class ConsensusCommon
 {
 public:
@@ -61,6 +55,10 @@ public:
 
 protected:
 
+    // Consensus subset count
+    // Each subset will attempt to reach consensus with m_numForConsensus number of peers who initially committed
+    static const unsigned int NUM_CONSENSUS_SETS = 50;
+
     enum ConsensusMessageType : unsigned char
     {
         ANNOUNCE = 0x00,
@@ -71,51 +69,32 @@ protected:
         FINALCOMMIT = 0x05,
         FINALCHALLENGE = 0x06,
         FINALRESPONSE = 0x07,
-        FINALCOLLECTIVESIG = 0x08,
-        COMMITFAILURE = 0x09,
-        CONSENSUSFAILURE = 0x10,
+        FINALCOLLECTIVESIG = 0x8
     };
 
-    /// State of the active consensus session.
+    // Overall consensus state
     State m_state;
 
-    /// The minimum fraction of peers necessary to achieve consensus.
-    const double TOLERANCE_FRACTION;
-
-    /// The unique ID assigned to the active consensus session. 
     uint32_t m_consensusID;
-
-    /// [TODO] The unique block hash assigned to the active consensus session.
     std::vector<unsigned char> m_blockHash;
-
-    /// The ID assigned to this peer (equal to its index in the peer table).
     uint16_t m_myID;
-
-    /// Private key of this peer.
     PrivKey m_myPrivKey;
-
-    /// List of public keys for the committee.
     std::deque<PubKey> m_pubKeys;
-
-    /// List of peers for the committee.
     std::deque<Peer> m_peerInfo;
-
-    /// The payload to be evaluated for the active consensus session.
     std::vector<unsigned char> m_message;
-
-    /// The class byte value for the next consensus message to be composed.
     unsigned char m_classByte;
-
-    /// The instruction byte value for the next consensus message to be composed.
     unsigned char m_insByte;
+    uint8_t m_finalSubsetID;
 
-    /// Generated collective signature
+    // Generated collective signature (overall)
     Signature m_collectiveSig;
 
-    /// Response map for the generated collective signature
-    std::vector<bool> m_responseMap;
+    // Generated collective signature (one per subset)
+    std::vector<Signature> m_subsetCollectiveSigs;
 
-    /// Constructor.
+    // Response map for the generated collective signature (one per subset)
+    std::vector<std::vector<bool>> m_responseMapSubsets;
+
     ConsensusCommon
     (
         uint32_t consensus_id,
@@ -128,50 +107,28 @@ protected:
         unsigned char ins_byte
     );
 
-    /// Destructor.
     ~ConsensusCommon();
 
-    /// Generates the signature over a consensus message.
-    Signature SignMessage(const std::vector<unsigned char> & msg, unsigned int offset, 
-                          unsigned int size);
-
-    /// Verifies the signature attached to a consensus message.
-    bool VerifyMessage(const std::vector<unsigned char> & msg, unsigned int offset, 
-                       unsigned int size, const Signature & toverify, uint16_t peer_id);
-
-    /// Aggregates public keys according to the response map.
+    Signature SignMessage(const std::vector<unsigned char> & msg, unsigned int offset, unsigned int size);
+    bool VerifyMessage(const std::vector<unsigned char> & msg, unsigned int offset, unsigned int size, const Signature & toverify, uint16_t peer_id);
     PubKey AggregateKeys(const std::vector<bool> peer_map);
-
-    /// Aggregates the list of received commits.
     CommitPoint AggregateCommits(const std::vector<CommitPoint> & commits);
-
-    /// Aggregates the list of received responses.
     Response AggregateResponses(const std::vector<Response> & responses);
-
-    /// Generates the collective signature.
     Signature AggregateSign(const Challenge & challenge, const Response & aggregated_response);
-
-    /// Generates the challenge according to the aggregated commit and key.
-    Challenge GetChallenge(const std::vector<unsigned char> & msg, unsigned int offset, 
-                           unsigned int size, const CommitPoint & aggregated_commit, 
-                           const PubKey & aggregated_key);
+    Challenge GetChallenge(const std::vector<unsigned char> & msg, unsigned int offset, unsigned int size, const CommitPoint & aggregated_commit, const PubKey & aggregated_key);
 
 public:
 
-    /// Consensus message processing function
-    virtual bool ProcessMessage(const std::vector<unsigned char> & message, unsigned int offset, 
-                                const Peer & from)
+    virtual bool ProcessMessage(const std::vector<unsigned char> & message, unsigned int offset)
     {
         return false; // Should be implemented by ConsensusLeader and ConsensusBackup
     }
 
-    /// Returns the state of the active consensus session
+    // Function to retrieve the state of this consensus session
     State GetState() const;
 
-    /// Returns the final collective signature
+    // Functions to retrieve the final collective signature and bit map
     bool RetrieveCollectiveSig(std::vector<unsigned char> & dst, unsigned int offset);
-
-    /// Returns the response map for the generated final collective signature
     uint16_t RetrieveCollectiveSigBitmap(std::vector<unsigned char> & dst, unsigned int offset);
 };
 

@@ -22,7 +22,7 @@
 #include "common/Executable.h"
 #include "Consensus.h"
 
-/// [TEST ONLY] Internal class for testing consensus.
+/// Internal class for testing consensus.
 class ConsensusUser : public Executable, public Broadcastable
 {
 private:
@@ -50,7 +50,7 @@ public:
 
     bool Execute(const std::vector<unsigned char> & message, unsigned int offset, const Peer & from);
 
-    bool MyMsgValidatorFunc(const std::vector<unsigned char> & message, std::vector<unsigned char> & errorMsg); // Needed by backup
+    bool MyMsgValidatorFunc(const std::vector<unsigned char> & message); // Needed by backup
 };
 
 #endif // __CONSENSUSUSER_H__
